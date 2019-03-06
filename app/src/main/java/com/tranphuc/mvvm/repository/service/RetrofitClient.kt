@@ -7,10 +7,30 @@ import retrofit2.converter.scalars.ScalarsConverterFactory
 
 class RetrofitClient {
 
-    public fun getClient(baseUrl: String): Retrofit {
-        return Retrofit.Builder().baseUrl(baseUrl)
+    private lateinit var retrofit: Retrofit
+
+    companion object {
+        private val BASE_URL: String = "https://api.randomuser.me/"
+        private var instance: RetrofitClient? = null
+
+        public fun getInstance(): RetrofitClient? {
+            if (instance == null) {
+                synchronized(RetrofitClient::class) {
+                    instance = RetrofitClient()
+                }
+            }
+            return instance
+        }
+    }
+
+    constructor() {
+        retrofit = Retrofit.Builder().baseUrl(BASE_URL)
             .addConverterFactory(ScalarsConverterFactory.create())
             .addConverterFactory(GsonConverterFactory.create())
             .build()
+    }
+
+    public fun getApi(): ApiInterface {
+        return retrofit.create(ApiInterface::class.java)
     }
 }
