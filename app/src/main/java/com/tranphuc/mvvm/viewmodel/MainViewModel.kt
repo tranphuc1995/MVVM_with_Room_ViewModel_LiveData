@@ -4,11 +4,17 @@ import android.app.Application
 import android.arch.lifecycle.AndroidViewModel
 import android.arch.lifecycle.LiveData
 import android.arch.lifecycle.MutableLiveData
+import android.os.AsyncTask
+import android.support.annotation.MainThread
+import android.util.Log
 import android.widget.Toast
 import com.tranphuc.mvvm.repository.database.AppDatabase
+import com.tranphuc.mvvm.repository.database.dao.PeopleDao
 import com.tranphuc.mvvm.repository.database.entity.People
 import com.tranphuc.mvvm.repository.service.RetrofitClient
 import com.tranphuc.mvvm.utils.AppUtils
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
@@ -50,20 +56,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
     private fun getPeopleFromApi() {
-        Thread(Runnable {
-            db?.peopleDao()?.deleteAllPeople()
-        }).start()
         setIsShowProgress(true)
-        var response = RetrofitClient.getInstance()?.getApi()?.getPeople("5", "en")
-        response?.enqueue(object : Callback<String> {
-            override fun onFailure(call: Call<String>, t: Throwable) {
-                onCallApiFailed()
-            }
-
-            override fun onResponse(call: Call<String>, response: Response<String>) {
-                onCallApiSuccess(response.body().toString())
-            }
-        })
+        RetrofitClient.getInstance()?.getApi()?.getPeople("20", "en")
+            ?.subscribeOn(Schedulers.io())
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe(
+                { result ->
+                    onCallApiSuccess(result)
+                },
+                { error ->
+                    onCallApiFailed()
+                }
+            )
     }
 
     private fun onCallApiFailed() {
@@ -80,10 +84,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             var linkImage = jsonItem.getJSONObject("picture").getString("medium")
             var people = People(name, linkImage)
             listPeople.add(people)
-            Thread(Runnable {
-                db?.peopleDao()?.insertPeople(people)
-            }).start()
         }
+        InsertPeopleAsyn(db).execute(listPeople)
         mListPeople.postValue(listPeople)
         setIsShowProgress(false)
     }
@@ -94,5 +96,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun getPeopleFromDb() {
         mListPeopleFromDb = db?.peopleDao()?.getAllPeople()
+    }
+
+
+    private class InsertPeopleAsyn(var db: AppDatabase?) : AsyncTask<List<People>, Any, Any>() {
+        var peopleDao: PeopleDao? = db?.peopleDao()
+
+        override fun doInBackground(vararg params: List<People>): Any {
+            peopleDao?.deleteAllPeople()
+            peopleDao?.insertPeople(params[0])
+            return ""
+        }
+
     }
 }
